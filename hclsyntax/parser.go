@@ -14,6 +14,12 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
+func isCollection(expr Expression) bool {
+	_, obj := expr.(*ObjectConsExpr)
+	_, tuple := expr.(*TupleConsExpr)
+	return obj || tuple
+}
+
 type parser struct {
 	*peeker
 
@@ -1441,7 +1447,7 @@ func (p *parser) parseObjectCons() (Expression, hcl.Diagnostics) {
 		}
 
 		// Wrapping parens are not explicitly represented in the AST, but
-		// we want to use them here to disambiguate intepreting a mapping
+		// we want to use them here to disambiguate interpreting a mapping
 		// key as a full expression rather than just a name, and so
 		// we'll remember this was present and use it to force the
 		// behavior of our final ObjectConsKeyExpr.
@@ -1530,6 +1536,14 @@ func (p *parser) parseObjectCons() (Expression, hcl.Diagnostics) {
 				items = append(items, ObjectConsItem{
 					KeyExpr:   key,
 					ValueExpr: exprSyntaxError,
+				})
+			} else if isCollection(value) {
+				// preserve inner object, then bail if we were parsing a tuple or an object.
+				// This preserves any error-corrected inner objects and provides the containers
+				// for supplying completions.
+				items = append(items, ObjectConsItem{
+					KeyExpr:   key,
+					ValueExpr: value,
 				})
 			}
 
