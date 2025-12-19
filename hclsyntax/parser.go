@@ -14,12 +14,6 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-func isCollection(expr Expression) bool {
-	_, obj := expr.(*ObjectConsExpr)
-	_, tuple := expr.(*TupleConsExpr)
-	return obj || tuple
-}
-
 type parser struct {
 	*peeker
 
@@ -1527,37 +1521,18 @@ func (p *parser) parseObjectCons() (Expression, hcl.Diagnostics) {
 
 		value, valueDiags := p.ParseExpression()
 		diags = append(diags, valueDiags...)
+		items = append(items, ObjectConsItem{
+			KeyExpr:   key,
+			ValueExpr: value,
+		})
 
 		if p.recovery && valueDiags.HasErrors() {
-			// If the value is an ExprSyntaxError, we can add an item with it, even though we will recover afterwards
-			// This allows downstream consumers to still retrieve this first invalid item, even though following items
-			// won't be parsed. This is useful for supplying completions.
-			if exprSyntaxError, ok := value.(*ExprSyntaxError); ok {
-				items = append(items, ObjectConsItem{
-					KeyExpr:   key,
-					ValueExpr: exprSyntaxError,
-				})
-			} else if isCollection(value) {
-				// preserve inner object, then bail if we were parsing a tuple or an object.
-				// This preserves any error-corrected inner objects and provides the containers
-				// for supplying completions.
-				items = append(items, ObjectConsItem{
-					KeyExpr:   key,
-					ValueExpr: value,
-				})
-			}
-
 			// If expression parsing failed then we are probably in a strange
 			// place in the token stream, so we'll bail out and try to reset
 			// to after our closing brace to allow parsing to continue.
 			close = p.recover(TokenCBrace)
 			break
 		}
-
-		items = append(items, ObjectConsItem{
-			KeyExpr:   key,
-			ValueExpr: value,
-		})
 
 		next = p.Peek()
 		if next.Type == TokenCBrace {
